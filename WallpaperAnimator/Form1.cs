@@ -1,32 +1,42 @@
-﻿using System;
+﻿using Gma.System.MouseKeyHook;
+using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.IO;
 using System.Linq;
+using System.Numerics;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Windows.Forms;
-using Gma.System.MouseKeyHook;
 using WindowUtils;
 
 namespace WallpaperAnimator
 {
     public partial class Form1 : Form
     {
-        private double _angle;
-        private Screen _screen;
-        private SolidBrush _brush;
-        private IKeyboardMouseEvents _events = Hook.GlobalEvents();
+        [DllImport("user32.dll")]
+        private static extern int GetForegroundWindow();
 
         [DllImport("user32.dll")]
-        static extern int GetForegroundWindow();
-
-        [DllImport("user32.dll")]
-        static extern int GetClassName(int hWnd, StringBuilder lpClassName, int nMaxCount);
+        private static extern int GetClassName(int hWnd, StringBuilder lpClassName, int nMaxCount);
 
         private MethodInfo _onClick = typeof(Control).GetRuntimeMethods().Single(m => m.Name == "OnClick");
+        private IKeyboardMouseEvents _events = Hook.GlobalEvents();
+
+        public static Screen Screen;
+        public static Random Random = new Random();
+
+        private Point _lastMouse;
+        private SolidBrush _brush;
+        private double _angle;
+        private bool _mouseDown;
+
+        private DateTime _lastUpdateTime = DateTime.Now;
+
+        private List<Particle> _particles = new List<Particle>();
 
         private bool DesktopFocus
         {
@@ -48,7 +58,7 @@ namespace WallpaperAnimator
         {
             InitializeComponent();
 
-            void Click (MouseEventArgs e)
+            void Click(MouseEventArgs e)
             {
                 if (DesktopFocus)
                 {
@@ -69,14 +79,14 @@ namespace WallpaperAnimator
                     }
 
                     if (!clickedControl)
-                        OnClick(e);
+                        OnMouseClick(e);
                 }
             }
 
             var wasDown = false;
 
             _events.MouseDown += (o, e) =>
-            { 
+            {
                 wasDown = true;
 
                 if (DesktopFocus)
@@ -111,10 +121,10 @@ namespace WallpaperAnimator
         private void Form1_Load(object sender, EventArgs e)
         {
             _brush = new SolidBrush(Color.Black);
-            _screen = Screen.FromPoint(Location);
+            Screen = Screen.FromPoint(Location);
 
-            ClientSize = _screen.Bounds.Size;
-            Location = _screen.Bounds.Location;
+            ClientSize = Screen.Bounds.Size;
+            Location = Screen.Bounds.Location;
 
             this.SetAsWallpaper();
 
@@ -132,15 +142,14 @@ namespace WallpaperAnimator
                             {
                                 _angle -= 1.5;
 
-                                Invoke((MethodInvoker) (() =>
-                                {
-                                    Invalidate();
-                                    for (var index = 0; index < Controls.Count; index++)
-                                    {
-                                        Control control = Controls[index];
-                                        control.Invalidate();
-                                    }
-                                }));
+                                Invoke((MethodInvoker)(() =>
+                               {
+                                   Invalidate();
+                                   for (var index = 0; index < Controls.Count; index++)
+                                   {
+                                       Controls[index].Invalidate();
+                                   }
+                               }));
                             }
 
                             //var renderTime = DateTime.Now - now;
@@ -154,22 +163,61 @@ namespace WallpaperAnimator
                     {
                     }
                 })
-                {IsBackground = true}.Start();
+            { IsBackground = true }.Start();
+        }
+
+        private void Form1_MouseClick(object sender, MouseEventArgs e)
+        {
+           //
+           // if (e.Button != MouseButtons.Left)
+               // return;
+
+           // SpawnParticles(e.Location, 16);
+        }
+
+        private void Form1_MouseDown(object sender, MouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Left)
+                _mouseDown = true;
+        }
+
+        private void Form1_MouseUp(object sender, MouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Left)
+                _mouseDown = false;
+        }
+
+        private void Form1_MouseMove(object sender, MouseEventArgs e)
+        {
+            _lastMouse = e.Location;
         }
 
         private void Form1_Paint(object sender, PaintEventArgs e)
         {
-            for (int i = 0; i < 16; i++)
+            var now = DateTime.Now;
+            var deltaTime = (float)(now - _lastUpdateTime).TotalMilliseconds / 50;
+
+            if (deltaTime >= 1)
             {
-                DrawSine(e.Graphics, 25, 25, 0.5f, _screen.WorkingArea.Height, i * 5);
+                OnUpdate();
+
+                _lastUpdateTime = now;
+
+                deltaTime--;
             }
+
+            e.Graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
+            // for (int i = 0; i < 16; i++)
+            // {
+            DrawSine(e.Graphics, 25, 25, 0.5f, Screen.WorkingArea.Height);
+            // }
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+
+            OnRender(e.Graphics, deltaTime);
         }
 
         private void DrawSine(Graphics g, float pointWidth, float pointHeight, float sineHeightRatio, float canvasHeight, float angleOffset = 0, float waveLengthRatio = 1)
         {
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-            g.PixelOffsetMode = PixelOffsetMode.HighQuality;
-
             var sizeY = (canvasHeight * sineHeightRatio - pointWidth) / 2f;
 
             var steps = ClientSize.Width / pointWidth;
@@ -190,7 +238,43 @@ namespace WallpaperAnimator
             }
         }
 
-        private Color Hue(double value)
+        private void SpawnParticles(Point p, int count)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                var offX = -25 + (float)Random.NextDouble() * 50;
+                var offY = -25 + (float)Random.NextDouble() * 50;
+
+                var dir = Vector2.Normalize(new Vector2(offX, offY)) * 4;
+
+                _particles.Add(new Particle(p.X + offX, p.Y + offY, dir.X, dir.Y, Random.Next(15, 25), 8 + (float)Random.NextDouble() * 24));
+            }
+        }
+
+        private void OnUpdate()
+        {
+            for (var index = _particles.Count - 1; index >= 0; index--)
+            {
+                var particle = _particles[index];
+                particle.Update();
+
+                if (particle.IsDead)
+                    _particles.Remove(particle);
+            }
+        }
+
+        private void OnRender(Graphics g, float deltaTime)
+        {
+            if (_mouseDown && DesktopFocus)
+                SpawnParticles(_lastMouse, 1);
+
+            for (var index = 0; index < _particles.Count; index++)
+            {
+                _particles[index].Render(g, deltaTime);
+            }
+        }
+
+        public static Color Hue(double value)
         {
             var rad = Math.PI / 180 * value;
             var third = Math.PI / 3;
@@ -226,19 +310,105 @@ namespace WallpaperAnimator
                         using (var theDesktop = theControlPanel?.OpenSubKey("Desktop"))
                         {
                             var wp = Convert.ToString(theDesktop?.GetValue("Wallpaper"));
-
-                            
                         }
                     }
                 }
             }
             catch { }*/
         }
+    }
 
-        private void button1_Click(object sender, EventArgs e)
+    internal class Particle
+    {
+        public float X, Y, PrevX, PrevY;
+
+        public float Mx, My;
+
+        public int Age, MaxAge;
+
+        public float Size, PrevSize, StartSize;
+
+        public float Alpha, PrevAlpha;
+
+        public float Angle, PrevAngle;
+
+        private readonly int _direction;
+
+        public bool IsDead;
+
+        private SolidBrush _brush = new SolidBrush(Color.Black);
+
+        public Particle(float x, float y, float mx, float my, int maxAge, float size)
         {
-            button1.BackColor = Hue(new Random().NextDouble() * 360);
-            //MessageBox.Show("asdasdad");
+            PrevX = X = x;
+            PrevY = Y = y;
+
+            var mult = Math.Min(32 / size, 5);
+
+            Mx = mx * mult;
+            My = my * mult;
+
+            MaxAge = maxAge;
+            StartSize = PrevSize = Size = size;
+
+            PrevAlpha = Alpha = 1;
+
+            PrevAngle = Angle = (float)Form1.Random.NextDouble() * 45;
+
+            _direction = Form1.Random.NextDouble() >= 0.5 ? -1 : 1;
+        }
+
+        public void Update()
+        {
+            PrevX = X;
+            PrevY = Y;
+
+            PrevSize = Size;
+            PrevAlpha = Alpha;
+
+            PrevAngle = Angle;
+
+            if (Age++ >= MaxAge)
+            {
+                if (Size <= 1)
+                    IsDead = true;
+                else
+                {
+                    Size *= 0.75f;
+                    Alpha *= Size / StartSize;
+                }
+            }
+
+            var mult = (float)Math.Min(Math.Sqrt(Mx * Mx + My * My), 4) * 4 * _direction;
+
+            Angle += mult;
+
+            X += Mx;
+            Y += My;
+
+            Mx *= 0.95f;
+            My *= 0.95f;
+        }
+
+        public void Render(Graphics g, float deltaTime)
+        {
+            var deltaX = PrevX + (X - PrevX) * deltaTime;
+            var deltaY = PrevY + (Y - PrevY) * deltaTime;
+
+            var deltaSize = PrevSize + (Size - PrevSize) * deltaTime;
+            var deltaAlpha = PrevAlpha + (Alpha - PrevAlpha) * deltaTime;
+
+            var deltaAngle = PrevAngle + (Angle - PrevAngle) * deltaTime;
+
+            var c = Form1.Hue(deltaX / Form1.Screen.Bounds.Width * 360);
+
+            _brush.Color = Color.FromArgb((int)(255 * deltaAlpha), c.R, c.G, c.B);
+
+            g.TranslateTransform(deltaX, deltaY);
+            g.RotateTransform(deltaAngle);
+            g.FillRectangle(_brush, -deltaSize / 2, -deltaSize / 2, deltaSize, deltaSize);
+            g.RotateTransform(-deltaAngle);
+            g.TranslateTransform(-deltaX, -deltaY);
         }
     }
 }
