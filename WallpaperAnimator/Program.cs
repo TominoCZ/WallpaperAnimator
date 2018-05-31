@@ -137,8 +137,6 @@ namespace WallpaperAnimator
                 return;
 
             GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
-            //GL.Enable(EnableCap.LineSmooth);
-            //GL.Enable(EnableCap.PolygonSmooth);
             GL.Enable(EnableCap.CullFace);
             GL.Enable(EnableCap.Blend);
             GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
@@ -148,7 +146,7 @@ namespace WallpaperAnimator
 
             var deltaTime = (float)_updateTimer.Elapsed.TotalMilliseconds / 50;
 
-            DrawSine(20, 20, 0.5f, Height, deltaTime);
+            DrawSine(25, 25, 0.5f, Height, deltaTime);
 
             if (_down.Contains(MouseButtons.Left))
             {
@@ -304,9 +302,9 @@ namespace WallpaperAnimator
             for (int i = 0; i < count; i++)
             {
                 var offX = -25 + (float)Random.NextDouble() * 50;
-                var offY = -5 + (float)Random.NextDouble() * 10;
+                var offY = -25 + (float)Random.NextDouble() * 50;
 
-                var dir = Vector2.Normalize(new Vector2(offX, offY)) * 1.5f;
+                var dir = Vector2.Normalize(new Vector2(offX, offY));
 
                 var size = 8 + (float)Random.NextDouble() * 24;
 
