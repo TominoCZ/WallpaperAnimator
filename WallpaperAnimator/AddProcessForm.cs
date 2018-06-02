@@ -1,12 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
-using System.Drawing;
 using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace WallpaperAnimator
@@ -34,7 +27,7 @@ namespace WallpaperAnimator
                 ProcessName = pn;
         }
 
-        private void tbProcessName_KeyDown(object sender, KeyEventArgs e)
+        private void TbProcessName_KeyDown(object sender, KeyEventArgs e)
         {
             if (e.KeyCode == Keys.Enter)
                 btnAdd.PerformClick();

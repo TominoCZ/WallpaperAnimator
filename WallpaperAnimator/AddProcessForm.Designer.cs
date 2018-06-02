@@ -28,6 +28,7 @@
         /// </summary>
         private void InitializeComponent()
         {
+            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(AddProcessForm));
             this.tbProcessName = new System.Windows.Forms.TextBox();
             this.btnAdd = new System.Windows.Forms.Button();
             this.SuspendLayout();
@@ -39,7 +40,7 @@
             this.tbProcessName.Size = new System.Drawing.Size(211, 27);
             this.tbProcessName.TabIndex = 0;
             this.tbProcessName.TextChanged += new System.EventHandler(this.TbProcessName_TextChanged);
-            this.tbProcessName.KeyDown += new System.Windows.Forms.KeyEventHandler(this.tbProcessName_KeyDown);
+            this.tbProcessName.KeyDown += new System.Windows.Forms.KeyEventHandler(this.TbProcessName_KeyDown);
             // 
             // btnAdd
             // 
@@ -61,6 +62,7 @@
             this.Controls.Add(this.btnAdd);
             this.Controls.Add(this.tbProcessName);
             this.Font = new System.Drawing.Font("Calibri", 12F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
             this.Margin = new System.Windows.Forms.Padding(4);
             this.MaximizeBox = false;
             this.MaximumSize = new System.Drawing.Size(251, 137);

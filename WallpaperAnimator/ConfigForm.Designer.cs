@@ -30,10 +30,9 @@ namespace WallpaperAnimator
         /// </summary>
         private void InitializeComponent()
         {
+            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(ConfigForm));
             this.lbProcessExceptions = new System.Windows.Forms.ListBox();
-            this.tbProcessName = new System.Windows.Forms.TextBox();
             this.groupBox1 = new System.Windows.Forms.GroupBox();
-            this.btnAddException = new System.Windows.Forms.Button();
             this.groupBox2 = new System.Windows.Forms.GroupBox();
             this.chbSpawnOnClick = new System.Windows.Forms.CheckBox();
             this.chbDrawSineWave = new System.Windows.Forms.CheckBox();
@@ -53,39 +52,20 @@ namespace WallpaperAnimator
             this.lbProcessExceptions.Location = new System.Drawing.Point(7, 27);
             this.lbProcessExceptions.Margin = new System.Windows.Forms.Padding(4);
             this.lbProcessExceptions.Name = "lbProcessExceptions";
-            this.lbProcessExceptions.Size = new System.Drawing.Size(149, 158);
+            this.lbProcessExceptions.Size = new System.Drawing.Size(149, 232);
             this.lbProcessExceptions.TabIndex = 0;
-            this.lbProcessExceptions.DoubleClick += new System.EventHandler(this.lbProcessExceptions_DoubleClick);
-            this.lbProcessExceptions.KeyDown += new System.Windows.Forms.KeyEventHandler(this.lbProcessExceptions_KeyDown);
-            // 
-            // tbProcessName
-            // 
-            this.tbProcessName.Location = new System.Drawing.Point(6, 192);
-            this.tbProcessName.Name = "tbProcessName";
-            this.tbProcessName.Size = new System.Drawing.Size(151, 27);
-            this.tbProcessName.TabIndex = 2;
+            this.lbProcessExceptions.DoubleClick += new System.EventHandler(this.LbProcessExceptions_DoubleClick);
+            this.lbProcessExceptions.KeyDown += new System.Windows.Forms.KeyEventHandler(this.LbProcessExceptions_KeyDown);
             // 
             // groupBox1
             // 
-            this.groupBox1.Controls.Add(this.btnAddException);
-            this.groupBox1.Controls.Add(this.tbProcessName);
             this.groupBox1.Controls.Add(this.lbProcessExceptions);
             this.groupBox1.Location = new System.Drawing.Point(12, 12);
             this.groupBox1.Name = "groupBox1";
-            this.groupBox1.Size = new System.Drawing.Size(163, 271);
+            this.groupBox1.Size = new System.Drawing.Size(163, 266);
             this.groupBox1.TabIndex = 3;
             this.groupBox1.TabStop = false;
             this.groupBox1.Text = "Process Exceptions";
-            // 
-            // btnAddException
-            // 
-            this.btnAddException.Enabled = false;
-            this.btnAddException.Location = new System.Drawing.Point(6, 225);
-            this.btnAddException.Name = "btnAddException";
-            this.btnAddException.Size = new System.Drawing.Size(151, 40);
-            this.btnAddException.TabIndex = 3;
-            this.btnAddException.Text = "ADD";
-            this.btnAddException.UseVisualStyleBackColor = true;
             // 
             // groupBox2
             // 
@@ -96,7 +76,7 @@ namespace WallpaperAnimator
             this.groupBox2.Controls.Add(this.nudFramerate);
             this.groupBox2.Location = new System.Drawing.Point(181, 12);
             this.groupBox2.Name = "groupBox2";
-            this.groupBox2.Size = new System.Drawing.Size(156, 271);
+            this.groupBox2.Size = new System.Drawing.Size(153, 266);
             this.groupBox2.TabIndex = 3;
             this.groupBox2.TabStop = false;
             this.groupBox2.Text = "Rendering";
@@ -104,35 +84,41 @@ namespace WallpaperAnimator
             // chbSpawnOnClick
             // 
             this.chbSpawnOnClick.AutoSize = true;
+            this.chbSpawnOnClick.Checked = true;
+            this.chbSpawnOnClick.CheckState = System.Windows.Forms.CheckState.Checked;
             this.chbSpawnOnClick.Location = new System.Drawing.Point(6, 78);
             this.chbSpawnOnClick.Name = "chbSpawnOnClick";
             this.chbSpawnOnClick.Size = new System.Drawing.Size(133, 23);
             this.chbSpawnOnClick.TabIndex = 2;
             this.chbSpawnOnClick.Text = "Spawn On Click";
             this.chbSpawnOnClick.UseVisualStyleBackColor = true;
-            this.chbSpawnOnClick.CheckedChanged += new System.EventHandler(this.chb_CheckedChanged);
+            this.chbSpawnOnClick.CheckedChanged += new System.EventHandler(this.Chb_CheckedChanged);
             // 
             // chbDrawSineWave
             // 
             this.chbDrawSineWave.AutoSize = true;
+            this.chbDrawSineWave.Checked = true;
+            this.chbDrawSineWave.CheckState = System.Windows.Forms.CheckState.Checked;
             this.chbDrawSineWave.Location = new System.Drawing.Point(6, 136);
             this.chbDrawSineWave.Name = "chbDrawSineWave";
             this.chbDrawSineWave.Size = new System.Drawing.Size(139, 23);
             this.chbDrawSineWave.TabIndex = 2;
             this.chbDrawSineWave.Text = "Draw Sine Wave";
             this.chbDrawSineWave.UseVisualStyleBackColor = true;
-            this.chbDrawSineWave.CheckedChanged += new System.EventHandler(this.chb_CheckedChanged);
+            this.chbDrawSineWave.CheckedChanged += new System.EventHandler(this.Chb_CheckedChanged);
             // 
             // chbBurningTaskBar
             // 
             this.chbBurningTaskBar.AutoSize = true;
+            this.chbBurningTaskBar.Checked = true;
+            this.chbBurningTaskBar.CheckState = System.Windows.Forms.CheckState.Checked;
             this.chbBurningTaskBar.Location = new System.Drawing.Point(6, 107);
             this.chbBurningTaskBar.Name = "chbBurningTaskBar";
             this.chbBurningTaskBar.Size = new System.Drawing.Size(142, 23);
             this.chbBurningTaskBar.TabIndex = 2;
             this.chbBurningTaskBar.Text = "Burning Task Bar";
             this.chbBurningTaskBar.UseVisualStyleBackColor = true;
-            this.chbBurningTaskBar.CheckedChanged += new System.EventHandler(this.chb_CheckedChanged);
+            this.chbBurningTaskBar.CheckedChanged += new System.EventHandler(this.Chb_CheckedChanged);
             // 
             // label1
             // 
@@ -145,11 +131,6 @@ namespace WallpaperAnimator
             // 
             // nudFramerate
             // 
-            this.nudFramerate.Increment = new decimal(new int[] {
-            15,
-            0,
-            0,
-            0});
             this.nudFramerate.Location = new System.Drawing.Point(6, 45);
             this.nudFramerate.Maximum = new decimal(new int[] {
             300,
@@ -169,17 +150,22 @@ namespace WallpaperAnimator
             0,
             0,
             0});
+            this.nudFramerate.ValueChanged += new System.EventHandler(this.NudFramerate_ValueChanged);
             // 
             // ConfigForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 19F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(457, 294);
+            this.ClientSize = new System.Drawing.Size(346, 290);
             this.Controls.Add(this.groupBox2);
             this.Controls.Add(this.groupBox1);
             this.Font = new System.Drawing.Font("Calibri", 12F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
             this.Margin = new System.Windows.Forms.Padding(4);
             this.MaximizeBox = false;
+            this.MaximumSize = new System.Drawing.Size(362, 329);
+            this.MinimizeBox = false;
+            this.MinimumSize = new System.Drawing.Size(362, 329);
             this.Name = "ConfigForm";
             this.ShowInTaskbar = false;
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
@@ -187,7 +173,6 @@ namespace WallpaperAnimator
             this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.ConfigForm_FormClosing);
             this.Load += new System.EventHandler(this.ConfigForm_Load);
             this.groupBox1.ResumeLayout(false);
-            this.groupBox1.PerformLayout();
             this.groupBox2.ResumeLayout(false);
             this.groupBox2.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.nudFramerate)).EndInit();
@@ -198,9 +183,7 @@ namespace WallpaperAnimator
         #endregion
 
         private System.Windows.Forms.ListBox lbProcessExceptions;
-        private System.Windows.Forms.TextBox tbProcessName;
         private System.Windows.Forms.GroupBox groupBox1;
-        private System.Windows.Forms.Button btnAddException;
         private System.Windows.Forms.GroupBox groupBox2;
         private System.Windows.Forms.Label label1;
         private System.Windows.Forms.NumericUpDown nudFramerate;

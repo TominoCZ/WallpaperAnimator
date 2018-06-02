@@ -1,4 +1,5 @@
 ﻿using Gma.System.MouseKeyHook;
+using Microsoft.Win32;
 using OpenTK;
 using OpenTK.Graphics;
 using OpenTK.Graphics.OpenGL;
@@ -9,15 +10,10 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
-using System.IO;
-using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using Microsoft.Win32;
-using OpenTK.Platform.Windows;
 using WallpaperAnimator.Properties;
 using WindowUtils;
 using Math = System.Math;
@@ -34,18 +30,18 @@ namespace WallpaperAnimator
             var game = new Game();
             Settings.Default.SettingsLoaded += game.LoadSettings;
 
-            new Thread(() =>
+            Task.Run(() =>
             {
-                var form = new SystemTrayApp();
+                var trayIcon = new SystemTrayApp();
 
-                form.OnExit += (o, e) =>
+                trayIcon.OnExit += (o, e) =>
                 {
                     game.Close();
                     game.Closed += (o1, a1) => { game.Dispose(); };
                 };
 
-                Application.Run(form);
-            }).Start();
+                Application.Run(trayIcon);
+            });
 
             game.Run(20);
         }
@@ -63,7 +59,7 @@ namespace WallpaperAnimator
             // Initialize Tray Icon
             _trayIcon = new NotifyIcon()
             {
-                Icon = Icon.ExtractAssociatedIcon("icon.ico"),
+                Icon = Resources.icon,
                 ContextMenu = new ContextMenu(new[] {
                     new MenuItem("Close", Exit)
                 }),
@@ -78,15 +74,30 @@ namespace WallpaperAnimator
                     {
                         _configForm = new ConfigForm();
                         _configForm.Show();
+                        _configForm.Closing += (obj, arg) =>
+                        {
+                            Show();
+                        };
+                        Hide();
                     }
                 }
             };
         }
 
+        public void Show()
+        {
+            _trayIcon.Visible = true;
+        }
+
+        public void Hide()
+        {
+            _trayIcon.Visible = false;
+        }
+
         public void Exit(object sender, EventArgs e)
         {
             // Hide tray icon, otherwise it will remain shown until user mouses over it
-            _trayIcon.Visible = false;
+            Hide();
 
             OnExit(this, null);
 
@@ -123,6 +134,8 @@ namespace WallpaperAnimator
         {
             Instance = this;
 
+            VSync = VSyncMode.On;
+
             WindowState = WindowState.Maximized;
             WindowBorder = WindowBorder.Hidden;
 
@@ -135,28 +148,21 @@ namespace WallpaperAnimator
 
         private void Init()
         {
+            Task.Run(() =>
+            {
+                Registry.SetValue(
+                    "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+                    "ListviewAlphaSelect", 0);
+
+                WindowUtil.Refresh();
+            });
+
             _updateTimer = new Stopwatch();
             _particleManager = new ParticleManager();
             _className = new StringBuilder(256);
 
-            var wasDown = false;
-
             _events.MouseDown += (o, e) =>
             {
-                if (!wasDown)
-                {
-                    wasDown = true;
-
-                    Task.Run(() =>
-                    {
-                        Registry.SetValue(
-                            "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
-                            "ListviewAlphaSelect", 0);
-
-                        WindowUtil.Refresh();
-                    });
-                }
-
                 if (!_down.Contains(e.Button))
                     _down.Add(e.Button);
 
@@ -169,11 +175,6 @@ namespace WallpaperAnimator
             };
             _events.MouseUp += (o, e) =>
             {
-                if (wasDown)
-                {
-                    wasDown = false;
-                }
-
                 _down.Remove(e.Button);
 
                 MouseButton btn = e.Button == MouseButtons.Right ? MouseButton.Right : MouseButton.Left;
@@ -222,13 +223,12 @@ namespace WallpaperAnimator
 
         protected override void OnUpdateFrame(FrameEventArgs e)
         {
-            if (_ticks++ >= 20 && !(_canUpdate = CanUpdate()))
+            if (_ticks++ >= 10)
             {
-                TargetRenderFrequency = 5;
+                if (!(_canUpdate = CanUpdate()))
+                    return;
 
                 _ticks = 0;
-
-                return;
             }
 
             TargetRenderFrequency = Settings.Default.FramerateLimit;
@@ -394,23 +394,29 @@ namespace WallpaperAnimator
 
         private bool CanUpdate()
         {
-            //TODO - fix , insane lag
-            /*
-            for (var index = 0; index < _processExceptions.Count; index++)
-            {
-                var exception = _processExceptions[index];
-
-                foreach (var process in Process.GetProcessesByName(exception))
-                {
-                    using (var p = process)
-                    {
-                        if (p.ProcessName.ToLower() == exception)
-                            return false;
-                    }
-                }
-            }*/
-
             var b = true;
+
+            //TODO - fix , causes lag
+            if (_processExceptions.Count > 0)
+            {
+                Process[] processes = Process.GetProcesses(".");
+
+                Parallel.ForEach(processes, p =>
+                {
+                    for (var index = 0; index < _processExceptions.Count; index++)
+                    {
+                        var exception = _processExceptions[index];
+
+                        if (string.Equals(p.ProcessName.ToLower(), exception, StringComparison.OrdinalIgnoreCase))
+                            b = false;
+                    }
+
+                    p.Dispose();
+                });
+
+                if (!b)
+                    return false;
+            }
 
             W32.EnumWindows((tophandle, topparamhandle) =>
             {
@@ -818,7 +824,7 @@ namespace WallpaperAnimator
 
         public static void Refresh()
         {
-            SendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE, IntPtr.Zero, null, SMTO_ABORTIFHUNG, 100,
+            SendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE, IntPtr.Zero, null, SMTO_ABORTIFHUNG, 500,
                 IntPtr.Zero);
         }
 
