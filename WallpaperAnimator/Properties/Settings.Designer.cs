@@ -22,5 +22,64 @@ namespace WallpaperAnimator.Properties {
                 return defaultInstance;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        public global::System.Collections.Specialized.StringCollection ProcessExceptions {
+            get {
+                return ((global::System.Collections.Specialized.StringCollection)(this["ProcessExceptions"]));
+            }
+            set {
+                this["ProcessExceptions"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("60")]
+        public int FramerateLimit {
+            get {
+                return ((int)(this["FramerateLimit"]));
+            }
+            set {
+                this["FramerateLimit"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("True")]
+        public bool SpawnOnClick {
+            get {
+                return ((bool)(this["SpawnOnClick"]));
+            }
+            set {
+                this["SpawnOnClick"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("True")]
+        public bool DrawSineWave {
+            get {
+                return ((bool)(this["DrawSineWave"]));
+            }
+            set {
+                this["DrawSineWave"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("True")]
+        public bool BurningTaskBar {
+            get {
+                return ((bool)(this["BurningTaskBar"]));
+            }
+            set {
+                this["BurningTaskBar"] = value;
+            }
+        }
     }
 }

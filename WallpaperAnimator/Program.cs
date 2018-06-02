@@ -5,12 +5,20 @@ using OpenTK.Graphics.OpenGL;
 using OpenTK.Input;
 using System;
 using System.Collections.Generic;
+using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
+using Microsoft.Win32;
+using OpenTK.Platform.Windows;
+using WallpaperAnimator.Properties;
 using WindowUtils;
 using Math = System.Math;
 
@@ -20,11 +28,69 @@ namespace WallpaperAnimator
     {
         private static void Main()
         {
-            using (var w = new Game())
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
+
+            var game = new Game();
+            Settings.Default.SettingsLoaded += game.LoadSettings;
+
+            new Thread(() =>
             {
-                w.SetAsWallpaper();
-                w.Run(20);
-            }
+                var form = new SystemTrayApp();
+
+                form.OnExit += (o, e) =>
+                {
+                    game.Close();
+                    game.Closed += (o1, a1) => { game.Dispose(); };
+                };
+
+                Application.Run(form);
+            }).Start();
+
+            game.Run(20);
+        }
+    }
+
+    public class SystemTrayApp : ApplicationContext
+    {
+        public EventHandler OnExit;
+
+        private NotifyIcon _trayIcon;
+        private Form _configForm;
+
+        public SystemTrayApp()
+        {
+            // Initialize Tray Icon
+            _trayIcon = new NotifyIcon()
+            {
+                Icon = Icon.ExtractAssociatedIcon("icon.ico"),
+                ContextMenu = new ContextMenu(new[] {
+                    new MenuItem("Close", Exit)
+                }),
+                Visible = true
+            };
+
+            _trayIcon.MouseClick += (o, e) =>
+            {
+                if (e.Button == MouseButtons.Left)
+                {
+                    if (_configForm == null || _configForm.IsDisposed || _configForm.Disposing)
+                    {
+                        _configForm = new ConfigForm();
+                        _configForm.Show();
+                    }
+                }
+            };
+        }
+
+        public void Exit(object sender, EventArgs e)
+        {
+            // Hide tray icon, otherwise it will remain shown until user mouses over it
+            _trayIcon.Visible = false;
+
+            OnExit(this, null);
+
+            Application.Exit();
         }
     }
 
@@ -38,11 +104,12 @@ namespace WallpaperAnimator
         private ParticleManager _particleManager;
 
         private StringBuilder _className;
+        private Screen _startScreen;
         private Point _lastMouse;
         private Size _lastWindowSize;
+        private int _ticks;
         private float _angle, _prevAngle;
         private bool _canUpdate = true;
-        private bool _wasFocused = false;
 
         private Stopwatch _updateTimer;
 
@@ -50,7 +117,7 @@ namespace WallpaperAnimator
 
         private static List<MouseButtons> _down = new List<MouseButtons>();
 
-        private static List<string> _processExceptions = new List<string>();
+        private static StringCollection _processExceptions = new StringCollection();
 
         public Game() : base(1, 1, _gMode, "", GameWindowFlags.Default, DisplayDevice.Default, 3, 3, GraphicsContextFlags.ForwardCompatible)
         {
@@ -58,6 +125,10 @@ namespace WallpaperAnimator
 
             WindowState = WindowState.Maximized;
             WindowBorder = WindowBorder.Hidden;
+
+            _startScreen = Screen.FromPoint(Location);
+
+            this.SetAsWallpaper();
 
             Init();
         }
@@ -68,8 +139,24 @@ namespace WallpaperAnimator
             _particleManager = new ParticleManager();
             _className = new StringBuilder(256);
 
+            var wasDown = false;
+
             _events.MouseDown += (o, e) =>
             {
+                if (!wasDown)
+                {
+                    wasDown = true;
+
+                    Task.Run(() =>
+                    {
+                        Registry.SetValue(
+                            "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+                            "ListviewAlphaSelect", 0);
+
+                        WindowUtil.Refresh();
+                    });
+                }
+
                 if (!_down.Contains(e.Button))
                     _down.Add(e.Button);
 
@@ -82,8 +169,10 @@ namespace WallpaperAnimator
             };
             _events.MouseUp += (o, e) =>
             {
-                if (!IsDesktopFocused())
-                    return;
+                if (wasDown)
+                {
+                    wasDown = false;
+                }
 
                 _down.Remove(e.Button);
 
@@ -95,40 +184,14 @@ namespace WallpaperAnimator
             {
                 _lastMouse = e.Location;
             };
-
-            LoadSettings();
         }
 
-        private void LoadSettings()
+        public void LoadSettings(object sender, EventArgs args)
         {
-            if (!File.Exists("wanim.cfg"))
-            {
-                File.WriteAllText("wanim.cfg", "//here you can specify which processes will make WallpaperAnimator not render if running");
-                return;
-            }
+            if (Settings.Default.ProcessExceptions is StringCollection s)
+                _processExceptions = s;
 
-            try
-            {
-                var lines = File.ReadAllLines("wanim.cfg");
-
-                foreach (var t in lines)
-                {
-                    var line = t.Replace(" ", "");
-
-                    if (line.StartsWith("//") || string.IsNullOrEmpty(line))
-                        continue;
-
-                    line = Path.GetFileNameWithoutExtension(line).ToLower();
-
-                    if (line == "explorer")
-                        continue;
-
-                    _processExceptions.Add(line);
-                }
-            }
-            catch
-            {
-            }
+            TargetRenderFrequency = Settings.Default.FramerateLimit;
         }
 
         protected override void OnRenderFrame(FrameEventArgs e)
@@ -137,35 +200,20 @@ namespace WallpaperAnimator
                 return;
 
             GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
-            GL.Enable(EnableCap.CullFace);
+            //GL.Enable(EnableCap.CullFace);
             GL.Enable(EnableCap.Blend);
             GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
             GL.BlendEquation(BlendEquationMode.FuncAdd);
-            GL.CullFace(CullFaceMode.Back);
+            //GL.CullFace(CullFaceMode.Back);
             GL.LineWidth(1.5f);
 
             var deltaTime = (float)_updateTimer.Elapsed.TotalMilliseconds / 50;
 
-            DrawSine(25, 25, 0.5f, Height, deltaTime);
+            if (Settings.Default.DrawSineWave)
+                DrawSine(25, 25, 0.5f, Height, deltaTime);
 
-            if (_down.Contains(MouseButtons.Left))
-            {
-                if (IsDesktopFocused())
-                {
-                    if (!_wasFocused)
-                    {
-                        _down.Clear();
-                    }
-                    else
-                        SpawnParticles(_lastMouse, 2);
-
-                    _wasFocused = true;
-                }
-                else if (_wasFocused)
-                {
-                    _wasFocused = false;
-                }
-            }
+            if (Settings.Default.SpawnOnClick && _down.Contains(MouseButtons.Left) && IsDesktopFocused())
+                SpawnParticles(_lastMouse, 2);
 
             _particleManager.Render(deltaTime);
 
@@ -174,13 +222,16 @@ namespace WallpaperAnimator
 
         protected override void OnUpdateFrame(FrameEventArgs e)
         {
-            if (!(_canUpdate = CanUpdate()))
+            if (_ticks++ >= 20 && !(_canUpdate = CanUpdate()))
             {
                 TargetRenderFrequency = 5;
+
+                _ticks = 0;
+
                 return;
             }
 
-            TargetRenderFrequency = 60;
+            TargetRenderFrequency = Settings.Default.FramerateLimit;
 
             //check screen size
             if (_lastWindowSize != Size)
@@ -198,17 +249,29 @@ namespace WallpaperAnimator
             _prevAngle = _angle;
             _angle -= 4f;
 
-            var step = Width / 16f;
-
-            for (int i = 0; i <= 16; i++)
+            if (Settings.Default.BurningTaskBar)
             {
-                var x = step * i;
+                var step = Width / 16f;
 
-                SpawnFireParticles(x, Height, 1);
+                for (int i = 0; i <= 16; i++)
+                {
+                    var x = step * i;
+
+                    SpawnFireParticles(x, Height, 1);
+                }
             }
 
             _particleManager.Update();
             _updateTimer.Restart();
+        }
+
+        protected override void OnClosing(CancelEventArgs e)
+        {
+            Registry.SetValue(
+                "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+                "ListviewAlphaSelect", 1);
+
+            WindowUtil.Refresh();
         }
 
         private void DrawSine(float pointWidth, float pointHeight, float sineHeightRatio, float canvasHeight, float deltaTime, float phaseOffset = 0, float waveLengthRatio = 1)
@@ -331,22 +394,42 @@ namespace WallpaperAnimator
 
         private bool CanUpdate()
         {
+            //TODO - fix , insane lag
+            /*
             for (var index = 0; index < _processExceptions.Count; index++)
             {
                 var exception = _processExceptions[index];
-                var arr = Process.GetProcessesByName(exception);
 
-                for (var i = 0; i < arr.Length; i++)
+                foreach (var process in Process.GetProcessesByName(exception))
                 {
-                    if (arr[i].ProcessName.ToLower() == exception)
-                        return false;
+                    using (var p = process)
+                    {
+                        if (p.ProcessName.ToLower() == exception)
+                            return false;
+                    }
                 }
-            }
+            }*/
 
-            var wnd = W32.GetForegroundWindow();
-            var placement = WindowUtil.GetPlacement(wnd);
+            var b = true;
 
-            return placement.showCmd != WindowUtil.ShowWindowCommands.Maximized || wnd == WindowInfo.Handle;
+            W32.EnumWindows((tophandle, topparamhandle) =>
+            {
+                if (tophandle != IntPtr.Zero)
+                {
+                    var placement = WindowUtil.GetPlacement(tophandle);
+
+                    if (placement.showCmd == WindowUtil.ShowWindowCommands.Maximized &&
+                        tophandle != WindowInfo.Handle && _startScreen.Bounds.Contains(placement.rcNormalPosition.Location))
+                    {
+                        b = false;
+                    }
+
+                    return true;
+                }
+                return true;
+            }, IntPtr.Zero);
+
+            return b;
         }
     }
 
@@ -539,14 +622,14 @@ namespace WallpaperAnimator
             GL.Begin(PrimitiveType.Polygon);
 
             GL.Color4(c.X, c.Y, c.Z, deltaAlpha * 0.2);
-            PutCircle(0, 0, 0, 24);
+            PutCircle(0, 0, 1, 24);
 
             GL.End();
 
             GL.Begin(PrimitiveType.LineLoop);
 
             GL.Color4(c.X, c.Y, c.Z, deltaAlpha);
-            PutCircle(0, 0, 0, 24);
+            PutCircle(0, 0, 1, 24);
 
             GL.End();
             GL.PopMatrix();
@@ -677,10 +760,10 @@ namespace WallpaperAnimator
                 return true;
             }, IntPtr.Zero);
 
-            IntPtr dc = W32.GetDCEx(workerw, IntPtr.Zero, (W32.DeviceContextValues)0x403);
-            W32.ReleaseDC(workerw, dc);
+            //IntPtr dc = W32.GetDCEx(workerw, IntPtr.Zero, (W32.DeviceContextValues)0x403);
+            //W32.ReleaseDC(workerw, dc);
 
-            if (W32.GetParent(form.WindowInfo.Handle) != workerw)
+            if (W32.GetParent(form.WindowInfo.Handle) != workerw) //if the window is not a child of WorkerW already
             {
                 form.Location = PointToWallpaper(form.Location);
 
@@ -724,6 +807,19 @@ namespace WallpaperAnimator
             p.Offset(offsetX, offsetY);
 
             return p;
+        }
+
+        [DllImport("user32.dll", SetLastError = false)]
+        private static extern IntPtr SendMessageTimeout(IntPtr hWnd, int Msg, IntPtr wParam, string lParam, uint fuFlags, uint uTimeout, IntPtr lpdwResult);
+
+        private static readonly IntPtr HWND_BROADCAST = new IntPtr(0xffff);
+        private const int WM_SETTINGCHANGE = 0x1a;
+        private const int SMTO_ABORTIFHUNG = 0x0002;
+
+        public static void Refresh()
+        {
+            SendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE, IntPtr.Zero, null, SMTO_ABORTIFHUNG, 100,
+                IntPtr.Zero);
         }
 
         public static WINDOWPLACEMENT GetPlacement(IntPtr hwnd)
