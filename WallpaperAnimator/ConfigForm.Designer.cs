@@ -39,6 +39,7 @@ namespace WallpaperAnimator
             this.chbBurningTaskBar = new System.Windows.Forms.CheckBox();
             this.label1 = new System.Windows.Forms.Label();
             this.nudFramerate = new System.Windows.Forms.NumericUpDown();
+            this.chbSelectionRect = new System.Windows.Forms.CheckBox();
             this.groupBox1.SuspendLayout();
             this.groupBox2.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.nudFramerate)).BeginInit();
@@ -69,6 +70,7 @@ namespace WallpaperAnimator
             // 
             // groupBox2
             // 
+            this.groupBox2.Controls.Add(this.chbSelectionRect);
             this.groupBox2.Controls.Add(this.chbSpawnOnClick);
             this.groupBox2.Controls.Add(this.chbDrawSineWave);
             this.groupBox2.Controls.Add(this.chbBurningTaskBar);
@@ -86,7 +88,7 @@ namespace WallpaperAnimator
             this.chbSpawnOnClick.AutoSize = true;
             this.chbSpawnOnClick.Checked = true;
             this.chbSpawnOnClick.CheckState = System.Windows.Forms.CheckState.Checked;
-            this.chbSpawnOnClick.Location = new System.Drawing.Point(6, 78);
+            this.chbSpawnOnClick.Location = new System.Drawing.Point(6, 107);
             this.chbSpawnOnClick.Name = "chbSpawnOnClick";
             this.chbSpawnOnClick.Size = new System.Drawing.Size(133, 23);
             this.chbSpawnOnClick.TabIndex = 2;
@@ -99,7 +101,7 @@ namespace WallpaperAnimator
             this.chbDrawSineWave.AutoSize = true;
             this.chbDrawSineWave.Checked = true;
             this.chbDrawSineWave.CheckState = System.Windows.Forms.CheckState.Checked;
-            this.chbDrawSineWave.Location = new System.Drawing.Point(6, 136);
+            this.chbDrawSineWave.Location = new System.Drawing.Point(6, 165);
             this.chbDrawSineWave.Name = "chbDrawSineWave";
             this.chbDrawSineWave.Size = new System.Drawing.Size(139, 23);
             this.chbDrawSineWave.TabIndex = 2;
@@ -112,7 +114,7 @@ namespace WallpaperAnimator
             this.chbBurningTaskBar.AutoSize = true;
             this.chbBurningTaskBar.Checked = true;
             this.chbBurningTaskBar.CheckState = System.Windows.Forms.CheckState.Checked;
-            this.chbBurningTaskBar.Location = new System.Drawing.Point(6, 107);
+            this.chbBurningTaskBar.Location = new System.Drawing.Point(6, 136);
             this.chbBurningTaskBar.Name = "chbBurningTaskBar";
             this.chbBurningTaskBar.Size = new System.Drawing.Size(142, 23);
             this.chbBurningTaskBar.TabIndex = 2;
@@ -152,6 +154,19 @@ namespace WallpaperAnimator
             0});
             this.nudFramerate.ValueChanged += new System.EventHandler(this.NudFramerate_ValueChanged);
             // 
+            // chbSelectionRect
+            // 
+            this.chbSelectionRect.AutoSize = true;
+            this.chbSelectionRect.Checked = true;
+            this.chbSelectionRect.CheckState = System.Windows.Forms.CheckState.Checked;
+            this.chbSelectionRect.Location = new System.Drawing.Point(6, 78);
+            this.chbSelectionRect.Name = "chbSelectionRect";
+            this.chbSelectionRect.Size = new System.Drawing.Size(124, 23);
+            this.chbSelectionRect.TabIndex = 3;
+            this.chbSelectionRect.Text = "Selection Rect";
+            this.chbSelectionRect.UseVisualStyleBackColor = true;
+            this.chbSelectionRect.CheckedChanged += new System.EventHandler(this.Chb_CheckedChanged);
+            // 
             // ConfigForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 19F);
@@ -190,5 +205,6 @@ namespace WallpaperAnimator
         private System.Windows.Forms.CheckBox chbSpawnOnClick;
         private System.Windows.Forms.CheckBox chbDrawSineWave;
         private System.Windows.Forms.CheckBox chbBurningTaskBar;
+        private System.Windows.Forms.CheckBox chbSelectionRect;
     }
 }

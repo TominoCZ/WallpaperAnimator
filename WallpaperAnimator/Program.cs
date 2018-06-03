@@ -10,12 +10,17 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
+using System.IO;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using OpenTK.Platform;
 using WallpaperAnimator.Properties;
 using WindowUtils;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement;
+using ListView = System.Windows.Forms.ListView;
 using Math = System.Math;
 
 namespace WallpaperAnimator
@@ -24,24 +29,10 @@ namespace WallpaperAnimator
     {
         private static void Main()
         {
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
-
             var game = new Game();
             Settings.Default.SettingsLoaded += game.LoadSettings;
 
-            Task.Run(() =>
-            {
-                var trayIcon = new SystemTrayApp();
-
-                trayIcon.OnExit += (o, e) =>
-                {
-                    game.Close();
-                    game.Closed += (o1, a1) => { game.Dispose(); };
-                };
-
-                Application.Run(trayIcon);
-            });
+            WindowUtil.RefreshExplorer();
 
             game.Run(20);
         }
@@ -51,6 +42,7 @@ namespace WallpaperAnimator
     {
         public EventHandler OnExit;
 
+        private bool _lastActive = true;
         private NotifyIcon _trayIcon;
         private Form _configForm;
 
@@ -59,34 +51,16 @@ namespace WallpaperAnimator
             // Initialize Tray Icon
             _trayIcon = new NotifyIcon()
             {
-                Icon = Resources.icon,
-                ContextMenu = new ContextMenu(new[] {
+                Icon = Resources.icon_on,
+                ContextMenu = new ContextMenu(new[]
+                {
+                    new MenuItem("Settings", OpenSettings),
                     new MenuItem("Close", Exit)
                 }),
                 Visible = true
             };
 
-            _trayIcon.MouseClick += (o, e) =>
-            {
-                if (e.Button == MouseButtons.Left)
-                {
-                    if (_configForm == null || _configForm.IsDisposed || _configForm.Disposing)
-                    {
-                        _configForm = new ConfigForm();
-                        _configForm.Show();
-                        _configForm.Closing += (obj, arg) =>
-                        {
-                            Show();
-                        };
-                        Hide();
-                    }
-                }
-            };
-        }
-
-        public void Show()
-        {
-            _trayIcon.Visible = true;
+            _trayIcon.DoubleClick += OpenSettings;
         }
 
         public void Hide()
@@ -94,10 +68,33 @@ namespace WallpaperAnimator
             _trayIcon.Visible = false;
         }
 
+        public void SetActive(bool active)
+        {
+            if (_lastActive == active)
+                return;
+
+            _trayIcon.Icon = (_lastActive = active) ? Resources.icon_on : Resources.icon_off;
+            ;
+        }
+
+        private void OpenSettings(object sender, EventArgs e)
+        {
+            if (_configForm == null || _configForm.IsDisposed || _configForm.Disposing)
+            {
+                _configForm = new ConfigForm();
+                _configForm.Show();
+            }
+        }
+
         public void Exit(object sender, EventArgs e)
         {
-            // Hide tray icon, otherwise it will remain shown until user mouses over it
+            // Hide tray icon_on, otherwise it will remain shown until user mouses over it
             Hide();
+
+            if (_configForm != null && !_configForm.IsDisposed && !_configForm.Disposing)
+            {
+                _configForm.Close();
+            }
 
             OnExit(this, null);
 
@@ -117,20 +114,35 @@ namespace WallpaperAnimator
         private StringBuilder _className;
         private Screen _startScreen;
         private Point _lastMouse;
+        private Point _lastMouseDown;
         private Size _lastWindowSize;
-        private int _ticks;
+        private long _checkTicks;
         private float _angle, _prevAngle;
         private bool _canUpdate = true;
+        private bool _closing;
+        private bool _desktopFocused;
 
         private Stopwatch _updateTimer;
 
         private static GraphicsMode _gMode = new GraphicsMode(32, 16, 0, 8, 0, 2, false);
-
+        private static StringCollection _processExceptions = new StringCollection();
+        private static SystemTrayApp _trayIcon;
         private static List<MouseButtons> _down = new List<MouseButtons>();
 
-        private static StringCollection _processExceptions = new StringCollection();
+        [DllImport("user32.dll")]
+        static extern bool SetLayeredWindowAttributes(IntPtr hwnd, uint crKey, byte bAlpha, uint dwFlags);
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
 
-        public Game() : base(1, 1, _gMode, "", GameWindowFlags.Default, DisplayDevice.Default, 3, 3, GraphicsContextFlags.ForwardCompatible)
+        public const int GWL_EXSTYLE = -20;
+        public const int WS_EX_LAYERED = 0x80000;
+        public const int LWA_ALPHA = 0x2;
+        public const int LWA_COLORKEY = 0x1;
+
+        public Game() : base(1, 1, _gMode, "", GameWindowFlags.Default, DisplayDevice.Default, 3, 3,
+            GraphicsContextFlags.ForwardCompatible)
         {
             Instance = this;
 
@@ -143,19 +155,18 @@ namespace WallpaperAnimator
 
             this.SetAsWallpaper();
 
+            //SetWindowLong(WindowInfo.Handle, GWL_EXSTYLE, GetWindowLong(WindowInfo.Handle, GWL_EXSTYLE) ^ WS_EX_LAYERED);
+            //SetLayeredWindowAttributes(WindowInfo.Handle, 0, 128, LWA_ALPHA);
+            //SetLayeredWindowAttributes(WindowInfo.Handle, 0, 0, LWA_COLORKEY);
+
             Init();
+
+            GetInfo.Test();
         }
 
         private void Init()
         {
-            Task.Run(() =>
-            {
-                Registry.SetValue(
-                    "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
-                    "ListviewAlphaSelect", 0);
-
-                WindowUtil.Refresh();
-            });
+            InitTrayIcon();
 
             _updateTimer = new Stopwatch();
             _particleManager = new ParticleManager();
@@ -164,9 +175,13 @@ namespace WallpaperAnimator
             _events.MouseDown += (o, e) =>
             {
                 if (!_down.Contains(e.Button))
-                    _down.Add(e.Button);
+                {
+                    _lastMouseDown = e.Location;
 
-                if (!IsDesktopFocused())
+                    _down.Add(e.Button);
+                }
+
+                if (!(_desktopFocused = IsDesktopFocused()))
                     return;
 
                 MouseButton btn = e.Button == MouseButtons.Right ? MouseButton.Right : MouseButton.Left;
@@ -177,14 +192,62 @@ namespace WallpaperAnimator
             {
                 _down.Remove(e.Button);
 
+                _desktopFocused = IsDesktopFocused();
+
                 MouseButton btn = e.Button == MouseButtons.Right ? MouseButton.Right : MouseButton.Left;
 
                 OnMouseUp(new MouseButtonEventArgs(e.X, e.Y, btn, true));
             };
             _events.MouseMove += (o, e) =>
             {
+                if (Settings.Default.SelectionRect && _down.Contains(MouseButtons.Left) && _desktopFocused)
+                {
+                    var sb = new StringBuilder(256);
+                    var w = W32.GetDesktopWindow();
+
+                    W32.EnumChildWindows(w, (hwnd, param) =>
+                    {
+                        if (W32.GetClassName(hwnd, sb, 256) > 0)
+                        {
+                            if (sb.ToString() == "SysListView32")
+                            {
+                                W32.SendMessage(hwnd, 0x001F, 0, IntPtr.Zero);
+                            }
+                        }
+
+                        sb.Clear();
+
+                        return true;
+                    }, IntPtr.Zero);
+                }
+
                 _lastMouse = e.Location;
             };
+        }
+
+        private void InitTrayIcon()
+        {
+            Task.Run(() =>
+            {
+                Application.EnableVisualStyles();
+                Application.SetCompatibleTextRenderingDefault(false);
+
+                _trayIcon = new SystemTrayApp();
+
+                _trayIcon.OnExit += (o, e) =>
+                {
+                    Task.Run(() =>
+                    {
+                        _closing = true;
+
+                        Visible = false;
+
+                        OnClosing(new CancelEventArgs());
+                    });
+                };
+
+                Application.Run(_trayIcon);
+            });
         }
 
         public void LoadSettings(object sender, EventArgs args)
@@ -193,44 +256,135 @@ namespace WallpaperAnimator
                 _processExceptions = s;
 
             TargetRenderFrequency = Settings.Default.FramerateLimit;
+
+            if (!Settings.Default.SelectionRect)
+            {
+                Task.Run(() =>
+                {
+                    Registry.SetValue(
+                        "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+                        "ListviewAlphaSelect", 0);
+
+                    WindowUtil.RefreshExplorer();
+                });
+            }
         }
 
         protected override void OnRenderFrame(FrameEventArgs e)
         {
-            if (!_canUpdate)
+            if (!_canUpdate || _closing)
                 return;
 
+            _desktopFocused = IsDesktopFocused();
+
             GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
+            //GL.ClearColor(0, 0, 0, 0);
             //GL.Enable(EnableCap.CullFace);
             GL.Enable(EnableCap.Blend);
             GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
             GL.BlendEquation(BlendEquationMode.FuncAdd);
             //GL.CullFace(CullFaceMode.Back);
-            GL.LineWidth(1.5f);
+            GL.LineWidth(2f);
 
             var deltaTime = (float)_updateTimer.Elapsed.TotalMilliseconds / 50;
 
             if (Settings.Default.DrawSineWave)
                 DrawSine(25, 25, 0.5f, Height, deltaTime);
 
-            if (Settings.Default.SpawnOnClick && _down.Contains(MouseButtons.Left) && IsDesktopFocused())
-                SpawnParticles(_lastMouse, 2);
-
             _particleManager.Render(deltaTime);
 
+            var mouseDown = _down.Contains(MouseButtons.Left);
+
+            if (mouseDown)
+                _desktopFocused = IsDesktopFocused();
+
+            if (mouseDown && _desktopFocused)
+            {
+                if (Settings.Default.SpawnOnClick)
+                    SpawnParticles(_lastMouse, 2);
+
+                if (Settings.Default.SelectionRect)
+                {
+                    var color1 = Hue.Create(_lastMouseDown.X / (float)Width * 360);
+                    var color2 = Hue.Create(_lastMouse.X / (float)Width * 360);
+
+                    GL.LineWidth(2f);
+
+                    GL.Begin(PrimitiveType.Polygon);
+                    //filled rectangle
+                    GL.Color4(color1.X, color1.Y, color1.Z, .2f);
+                    GL.Vertex2(_lastMouseDown.X, _lastMouseDown.Y);
+                    GL.Vertex2(_lastMouseDown.X, _lastMouse.Y);
+
+                    GL.Color4(color2.X, color2.Y, color2.Z, .2f);
+                    GL.Vertex2(_lastMouse.X, _lastMouse.Y);
+                    GL.Vertex2(_lastMouse.X, _lastMouseDown.Y);
+                    GL.End();
+
+                    GL.Begin(PrimitiveType.LineLoop);
+
+                    //outline
+                    GL.Color4(color1.X, color1.Y, color1.Z, 1f);
+                    GL.Vertex2(_lastMouseDown.X, _lastMouseDown.Y);
+                    GL.Vertex2(_lastMouseDown.X, _lastMouse.Y);
+
+                    GL.Color4(color2.X, color2.Y, color2.Z, 1f);
+                    GL.Vertex2(_lastMouse.X, _lastMouse.Y);
+                    GL.Vertex2(_lastMouse.X, _lastMouseDown.Y);
+                    GL.End();
+
+                    //the filled circles
+                    GL.Color4(color1.X, color1.Y, color1.Z, 1f);
+
+                    GL.Begin(PrimitiveType.Polygon);
+                    VertexUtil.PutCircle(_lastMouseDown.X, _lastMouseDown.Y, 6, 16);
+                    GL.End();
+
+                    GL.Begin(PrimitiveType.Polygon);
+                    VertexUtil.PutCircle(_lastMouseDown.X, _lastMouse.Y, 6, 16);
+                    GL.End();
+
+                    GL.Color4(color2.X, color2.Y, color2.Z, 1f);
+
+                    GL.Begin(PrimitiveType.Polygon);
+                    VertexUtil.PutCircle(_lastMouse.X, _lastMouse.Y, 6, 16);
+                    GL.End();
+
+                    GL.Begin(PrimitiveType.Polygon);
+                    VertexUtil.PutCircle(_lastMouse.X, _lastMouseDown.Y, 6, 16);
+                    GL.End();
+                }
+            }
+
             SwapBuffers();
+
+            //glEnable GL_ALPHA_TEST 
+
+            //glEnable GL_COLOR_MATERIAL 
+
+            //Transparent-OpenGL-window 
+            //glBlendFunc GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA 
         }
 
         protected override void OnUpdateFrame(FrameEventArgs e)
         {
-            if (_ticks++ >= 10)
+            if (_closing)
+                return;
+
+            _desktopFocused = IsDesktopFocused();
+
+            if (_checkTicks++ >= 10)
             {
                 if (!(_canUpdate = CanUpdate()))
+                {
+                    _trayIcon?.SetActive(false);
                     return;
+                }
 
-                _ticks = 0;
+                _checkTicks = 0;
             }
 
+            _trayIcon?.SetActive(true);
             TargetRenderFrequency = Settings.Default.FramerateLimit;
 
             //check screen size
@@ -271,10 +425,14 @@ namespace WallpaperAnimator
                 "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
                 "ListviewAlphaSelect", 1);
 
-            WindowUtil.Refresh();
+            WindowUtil.ReloadWallpaper();
+            WindowUtil.RefreshExplorer();
+
+            base.OnClosing(e);
         }
 
-        private void DrawSine(float pointWidth, float pointHeight, float sineHeightRatio, float canvasHeight, float deltaTime, float phaseOffset = 0, float waveLengthRatio = 1)
+        private void DrawSine(float pointWidth, float pointHeight, float sineHeightRatio, float canvasHeight,
+            float deltaTime, float phaseOffset = 0, float waveLengthRatio = 1)
         {
             var sizeY = (canvasHeight * sineHeightRatio - pointWidth) / 2f;
 
@@ -371,7 +529,8 @@ namespace WallpaperAnimator
 
                 var size = 8 + (float)Random.NextDouble() * 24;
 
-                var particle = new ParticleSquare(x + offX, y + (float)Math.Sqrt(size * size + size * size), dir.X, -Math.Abs(dir.Y * 2f), Random.Next(20, 40),
+                var particle = new ParticleSquare(x + offX, y + (float)Math.Sqrt(size * size + size * size), dir.X,
+                        -Math.Abs(dir.Y * 2f), Random.Next(20, 40),
                         size)
                 { Acceleration = 1f };
 
@@ -396,7 +555,6 @@ namespace WallpaperAnimator
         {
             var b = true;
 
-            //TODO - fix , causes lag
             if (_processExceptions.Count > 0)
             {
                 Process[] processes = Process.GetProcesses(".");
@@ -420,22 +578,234 @@ namespace WallpaperAnimator
 
             W32.EnumWindows((tophandle, topparamhandle) =>
             {
-                if (tophandle != IntPtr.Zero)
+                if (tophandle != IntPtr.Zero && tophandle != WindowInfo.Handle)
                 {
                     var placement = WindowUtil.GetPlacement(tophandle);
 
                     if (placement.showCmd == WindowUtil.ShowWindowCommands.Maximized &&
-                        tophandle != WindowInfo.Handle && _startScreen.Bounds.Contains(placement.rcNormalPosition.Location))
+                        _startScreen.Bounds.Contains(placement.rcNormalPosition.Location))
                     {
                         b = false;
                     }
 
                     return true;
                 }
+
                 return true;
             }, IntPtr.Zero);
 
             return b;
+        }
+
+        static class GetInfo
+        {
+            public enum LVM
+            {
+                FIRST = 0x1000,
+                SETUNICODEFORMAT = 0x2005,        // CCM_SETUNICODEFORMAT,
+                GETUNICODEFORMAT = 0x2006,        // CCM_GETUNICODEFORMAT,
+                GETBKCOLOR = (FIRST + 0),
+                SETBKCOLOR = (FIRST + 1),
+                GETIMAGELIST = (FIRST + 2),
+                SETIMAGELIST = (FIRST + 3),
+                GETITEMCOUNT = (FIRST + 4),
+                GETITEMA = (FIRST + 5),
+                GETITEMW = (FIRST + 75),
+                GETITEM = GETITEMW,
+                //GETITEM                = GETITEMA,
+                SETITEMA = (FIRST + 6),
+                SETITEMW = (FIRST + 76),
+                SETITEM = SETITEMW,
+                //SETITEM                = SETITEMA,
+                INSERTITEMA = (FIRST + 7),
+                INSERTITEMW = (FIRST + 77),
+                INSERTITEM = INSERTITEMW,
+                //INSERTITEM             = INSERTITEMA,
+                DELETEITEM = (FIRST + 8),
+                DELETEALLITEMS = (FIRST + 9),
+                GETCALLBACKMASK = (FIRST + 10),
+                SETCALLBACKMASK = (FIRST + 11),
+                GETNEXTITEM = (FIRST + 12),
+                FINDITEMA = (FIRST + 13),
+                FINDITEMW = (FIRST + 83),
+                GETITEMRECT = (FIRST + 14),
+                SETITEMPOSITION = (FIRST + 15),
+                GETITEMPOSITION = (FIRST + 16),
+                GETSTRINGWIDTHA = (FIRST + 17),
+                GETSTRINGWIDTHW = (FIRST + 87),
+                HITTEST = (FIRST + 18),
+                ENSUREVISIBLE = (FIRST + 19),
+                SCROLL = (FIRST + 20),
+                REDRAWITEMS = (FIRST + 21),
+                ARRANGE = (FIRST + 22),
+                EDITLABELA = (FIRST + 23),
+                EDITLABELW = (FIRST + 118),
+                EDITLABEL = EDITLABELW,
+                //EDITLABEL              = EDITLABELA,
+                GETEDITCONTROL = (FIRST + 24),
+                GETCOLUMNA = (FIRST + 25),
+                GETCOLUMNW = (FIRST + 95),
+                SETCOLUMNA = (FIRST + 26),
+                SETCOLUMNW = (FIRST + 96),
+                INSERTCOLUMNA = (FIRST + 27),
+                INSERTCOLUMNW = (FIRST + 97),
+                DELETECOLUMN = (FIRST + 28),
+                GETCOLUMNWIDTH = (FIRST + 29),
+                SETCOLUMNWIDTH = (FIRST + 30),
+                GETHEADER = (FIRST + 31),
+                CREATEDRAGIMAGE = (FIRST + 33),
+                GETVIEWRECT = (FIRST + 34),
+                GETTEXTCOLOR = (FIRST + 35),
+                SETTEXTCOLOR = (FIRST + 36),
+                GETTEXTBKCOLOR = (FIRST + 37),
+                SETTEXTBKCOLOR = (FIRST + 38),
+                GETTOPINDEX = (FIRST + 39),
+                GETCOUNTPERPAGE = (FIRST + 40),
+                GETORIGIN = (FIRST + 41),
+                UPDATE = (FIRST + 42),
+                SETITEMSTATE = (FIRST + 43),
+                GETITEMSTATE = (FIRST + 44),
+                GETITEMTEXTA = (FIRST + 45),
+                GETITEMTEXTW = (FIRST + 115),
+                SETITEMTEXTA = (FIRST + 46),
+                SETITEMTEXTW = (FIRST + 116),
+                SETITEMCOUNT = (FIRST + 47),
+                SORTITEMS = (FIRST + 48),
+                SETITEMPOSITION32 = (FIRST + 49),
+                GETSELECTEDCOUNT = (FIRST + 50),
+                GETITEMSPACING = (FIRST + 51),
+                GETISEARCHSTRINGA = (FIRST + 52),
+                GETISEARCHSTRINGW = (FIRST + 117),
+                GETISEARCHSTRING = GETISEARCHSTRINGW,
+                //GETISEARCHSTRING       = GETISEARCHSTRINGA,
+                SETICONSPACING = (FIRST + 53),
+                SETEXTENDEDLISTVIEWSTYLE = (FIRST + 54),            // optional wParam == mask
+                GETEXTENDEDLISTVIEWSTYLE = (FIRST + 55),
+                GETSUBITEMRECT = (FIRST + 56),
+                SUBITEMHITTEST = (FIRST + 57),
+                SETCOLUMNORDERARRAY = (FIRST + 58),
+                GETCOLUMNORDERARRAY = (FIRST + 59),
+                SETHOTITEM = (FIRST + 60),
+                GETHOTITEM = (FIRST + 61),
+                SETHOTCURSOR = (FIRST + 62),
+                GETHOTCURSOR = (FIRST + 63),
+                APPROXIMATEVIEWRECT = (FIRST + 64),
+                SETWORKAREAS = (FIRST + 65),
+                GETWORKAREAS = (FIRST + 70),
+                GETNUMBEROFWORKAREAS = (FIRST + 73),
+                GETSELECTIONMARK = (FIRST + 66),
+                SETSELECTIONMARK = (FIRST + 67),
+                SETHOVERTIME = (FIRST + 71),
+                GETHOVERTIME = (FIRST + 72),
+                SETTOOLTIPS = (FIRST + 74),
+                GETTOOLTIPS = (FIRST + 78),
+                SORTITEMSEX = (FIRST + 81),
+                SETBKIMAGEA = (FIRST + 68),
+                SETBKIMAGEW = (FIRST + 138),
+                GETBKIMAGEA = (FIRST + 69),
+                GETBKIMAGEW = (FIRST + 139),
+                SETSELECTEDCOLUMN = (FIRST + 140),
+                SETVIEW = (FIRST + 142),
+                GETVIEW = (FIRST + 143),
+                INSERTGROUP = (FIRST + 145),
+                SETGROUPINFO = (FIRST + 147),
+                GETGROUPINFO = (FIRST + 149),
+                REMOVEGROUP = (FIRST + 150),
+                MOVEGROUP = (FIRST + 151),
+                GETGROUPCOUNT = (FIRST + 152),
+                GETGROUPINFOBYINDEX = (FIRST + 153),
+                MOVEITEMTOGROUP = (FIRST + 154),
+                GETGROUPRECT = (FIRST + 98),
+                SETGROUPMETRICS = (FIRST + 155),
+                GETGROUPMETRICS = (FIRST + 156),
+                ENABLEGROUPVIEW = (FIRST + 157),
+                SORTGROUPS = (FIRST + 158),
+                INSERTGROUPSORTED = (FIRST + 159),
+                REMOVEALLGROUPS = (FIRST + 160),
+                HASGROUP = (FIRST + 161),
+                GETGROUPSTATE = (FIRST + 92),
+                GETFOCUSEDGROUP = (FIRST + 93),
+                SETTILEVIEWINFO = (FIRST + 162),
+                GETTILEVIEWINFO = (FIRST + 163),
+                SETTILEINFO = (FIRST + 164),
+                GETTILEINFO = (FIRST + 165),
+                SETINSERTMARK = (FIRST + 166),
+                GETINSERTMARK = (FIRST + 167),
+                INSERTMARKHITTEST = (FIRST + 168),
+                GETINSERTMARKRECT = (FIRST + 169),
+                SETINSERTMARKCOLOR = (FIRST + 170),
+                GETINSERTMARKCOLOR = (FIRST + 171),
+                GETSELECTEDCOLUMN = (FIRST + 174),
+                ISGROUPVIEWENABLED = (FIRST + 175),
+                GETOUTLINECOLOR = (FIRST + 176),
+                SETOUTLINECOLOR = (FIRST + 177),
+                CANCELEDITLABEL = (FIRST + 179),
+                MAPINDEXTOID = (FIRST + 180),
+                MAPIDTOINDEX = (FIRST + 181),
+                ISITEMVISIBLE = (FIRST + 182),
+                GETACCVERSION = (FIRST + 193),
+                GETEMPTYTEXT = (FIRST + 204),
+                GETFOOTERRECT = (FIRST + 205),
+                GETFOOTERINFO = (FIRST + 206),
+                GETFOOTERITEMRECT = (FIRST + 207),
+                GETFOOTERITEM = (FIRST + 208),
+                GETITEMINDEXRECT = (FIRST + 209),
+                SETITEMINDEXSTATE = (FIRST + 210),
+                GETNEXTITEMINDEX = (FIRST + 211),
+                SETPRESERVEALPHA = (FIRST + 212),
+                SETBKIMAGE = SETBKIMAGEW,
+                GETBKIMAGE = GETBKIMAGEW,
+                //SETBKIMAGE             = SETBKIMAGEA,
+                //GETBKIMAGE             = GETBKIMAGEA,
+            }
+
+            [DllImport("user32.dll", SetLastError = true)]
+            public static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
+
+            [DllImport("user32.dll", SetLastError = true)]
+            public static extern IntPtr FindWindowEx(IntPtr parentHandle, IntPtr childAfter, string className,
+                string windowTitle);
+
+            [DllImport("user32.dll", CharSet = CharSet.Auto)]
+            public static extern int SendMessage(IntPtr hWnd, uint Msg, int wParam, IntPtr lParam);
+
+            [DllImport("user32.dll", CharSet = CharSet.Auto)]
+            public static extern int SendMessage(IntPtr hWnd, uint Msg, int wParam, ref IntPtr lParam);
+
+            [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
+            public struct POINT
+            {
+                public long x;
+                public long y;
+            }
+
+            public static void Test()
+            {
+                //IntPtr handle = FindWindow("Progman", null);
+                //handle = FindWindowEx(handle, IntPtr.Zero, "SHELLDLL_DefView", null);
+                var sb = new StringBuilder(256);
+
+                var handle = IntPtr.Zero;
+
+                W32.EnumChildWindows(W32.GetDesktopWindow(), (hwnd, param) =>
+                {
+                    if (W32.GetClassName(hwnd, sb, 256) > 0)
+                    {
+                        if (sb.ToString() == "SysListView32")
+                        {
+                            handle = hwnd;
+                        }
+                    }
+
+                    sb.Clear();
+                    return true;
+                }, IntPtr.Zero);
+
+                //Get the Number of Icons
+                int iconCount = SendMessage(handle, (int)LVM.GETITEMCOUNT, 0, IntPtr.Zero);
+
+                Console.WriteLine("Number of Icons on Desktop: " + iconCount);
+            }
         }
     }
 
@@ -519,16 +889,16 @@ namespace WallpaperAnimator
             GL.End();
 
             GL.Begin(PrimitiveType.Polygon);
-            PutCircle(-0.5f, -0.5f, .2f);
+            VertexUtil.PutCircle(-0.5f, -0.5f, .25f);
             GL.End();
             GL.Begin(PrimitiveType.Polygon);
-            PutCircle(-0.5f, 0.5f, .2f);
+            VertexUtil.PutCircle(-0.5f, 0.5f, .25f);
             GL.End();
             GL.Begin(PrimitiveType.Polygon);
-            PutCircle(0.5f, 0.5f, .2f);
+            VertexUtil.PutCircle(0.5f, 0.5f, .25f);
             GL.End();
             GL.Begin(PrimitiveType.Polygon);
-            PutCircle(0.5f, -0.5f, .2f);
+            VertexUtil.PutCircle(0.5f, -0.5f, .25f);
             GL.End();
 
             GL.PopMatrix();
@@ -584,13 +954,13 @@ namespace WallpaperAnimator
             GL.End();
 
             GL.Begin(PrimitiveType.Polygon);
-            PutCircle(0, -x, .2f);
+            VertexUtil.PutCircle(0, -x, .25f);
             GL.End();
             GL.Begin(PrimitiveType.Polygon);
-            PutCircle(-0.5f, x, .2f);
+            VertexUtil.PutCircle(-0.5f, x, .25f);
             GL.End();
             GL.Begin(PrimitiveType.Polygon);
-            PutCircle(0.5f, x, .2f);
+            VertexUtil.PutCircle(0.5f, x, .25f);
 
             GL.End();
             GL.PopMatrix();
@@ -628,14 +998,14 @@ namespace WallpaperAnimator
             GL.Begin(PrimitiveType.Polygon);
 
             GL.Color4(c.X, c.Y, c.Z, deltaAlpha * 0.2);
-            PutCircle(0, 0, 1, 24);
+            VertexUtil.PutCircle(0, 0, 1, 24);
 
             GL.End();
 
             GL.Begin(PrimitiveType.LineLoop);
 
             GL.Color4(c.X, c.Y, c.Z, deltaAlpha);
-            PutCircle(0, 0, 1, 24);
+            VertexUtil.PutCircle(0, 0, 1, 24);
 
             GL.End();
             GL.PopMatrix();
@@ -720,19 +1090,6 @@ namespace WallpaperAnimator
         public virtual void Render(float deltaTime)
         {
         }
-
-        protected void PutCircle(float centerX = 0, float centerY = 0, float size = 1, int points = 10)
-        {
-            for (int i = points - 1; i >= 0; i--)
-            {
-                var a = i / (float)points;
-
-                var x = Math.Cos(a * MathHelper.TwoPi) / 2 * size;
-                var y = Math.Sin(a * MathHelper.TwoPi) / 2 * size;
-
-                GL.Vertex2(x + centerX, y + centerY);
-            }
-        }
     }
 
     internal static class Hue
@@ -747,6 +1104,22 @@ namespace WallpaperAnimator
             var b = (float)Math.Sin(rad + third * 4) * 0.5f + 0.5f;
 
             return new Vector3(r, g, b);
+        }
+    }
+
+    public static class VertexUtil
+    {
+        public static void PutCircle(float centerX = 0, float centerY = 0, float size = 1, int points = 10)
+        {
+            for (int i = points - 1; i >= 0; i--)
+            {
+                var a = i / (float)points;
+
+                var x = Math.Cos(a * MathHelper.TwoPi) / 2 * size;
+                var y = Math.Sin(a * MathHelper.TwoPi) / 2 * size;
+
+                GL.Vertex2(x + centerX, y + centerY);
+            }
         }
     }
 
@@ -815,17 +1188,27 @@ namespace WallpaperAnimator
             return p;
         }
 
-        [DllImport("user32.dll", SetLastError = false)]
-        private static extern IntPtr SendMessageTimeout(IntPtr hWnd, int Msg, IntPtr wParam, string lParam, uint fuFlags, uint uTimeout, IntPtr lpdwResult);
-
-        private static readonly IntPtr HWND_BROADCAST = new IntPtr(0xffff);
-        private const int WM_SETTINGCHANGE = 0x1a;
-        private const int SMTO_ABORTIFHUNG = 0x0002;
-
-        public static void Refresh()
+        public static void ReloadWallpaper()
         {
-            SendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE, IntPtr.Zero, null, SMTO_ABORTIFHUNG, 500,
-                IntPtr.Zero);
+            try
+            {
+                var appdata = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+
+                string tempPath = $"{Path.GetTempFileName()}.jpg";
+
+                File.Copy($@"{appdata}\Microsoft\Windows\Themes\TranscodedWallpaper", tempPath);
+
+                W32.SystemParametersInfo(20,
+                    0,
+                    tempPath,
+                    3);
+            }
+            catch { }
+        }
+
+        public static void RefreshExplorer()
+        {
+            W32.SendMessageTimeout(new IntPtr(0xffff), 0x1a, IntPtr.Zero, IntPtr.Zero, W32.SendMessageTimeoutFlags.SMTO_ABORTIFHUNG, 100, out var result);
         }
 
         public static WINDOWPLACEMENT GetPlacement(IntPtr hwnd)

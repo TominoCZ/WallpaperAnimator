@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Threading.Tasks;
 using System.Windows.Forms;
+using Microsoft.Win32;
 using WallpaperAnimator.Properties;
 
 namespace WallpaperAnimator
@@ -35,6 +37,7 @@ namespace WallpaperAnimator
 
             nudFramerate.Value = Settings.Default.FramerateLimit;
 
+            chbSelectionRect.Checked = Settings.Default.SelectionRect;
             chbSpawnOnClick.Checked = Settings.Default.SpawnOnClick;
             chbDrawSineWave.Checked = Settings.Default.DrawSineWave;
             chbBurningTaskBar.Checked = Settings.Default.BurningTaskBar;
@@ -58,6 +61,7 @@ namespace WallpaperAnimator
 
             Settings.Default.FramerateLimit = (int)nudFramerate.Value;
 
+            Settings.Default.SelectionRect = chbSelectionRect.Checked;
             Settings.Default.SpawnOnClick = chbSpawnOnClick.Checked;
             Settings.Default.DrawSineWave = chbDrawSineWave.Checked;
             Settings.Default.BurningTaskBar = chbBurningTaskBar.Checked;
@@ -68,6 +72,18 @@ namespace WallpaperAnimator
         private void Chb_CheckedChanged(object sender, EventArgs e)
         {
             SaveSettings();
+
+            if (sender == chbSelectionRect)
+            {
+                Task.Run(() =>
+                {
+                    Registry.SetValue(
+                        "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+                        "ListviewAlphaSelect", Settings.Default.SelectionRect ? 0 : 1);
+
+                    WindowUtil.RefreshExplorer();
+                });
+            }
         }
 
         private void LbProcessExceptions_KeyDown(object sender, KeyEventArgs e)

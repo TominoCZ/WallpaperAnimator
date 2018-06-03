@@ -63,9 +63,19 @@ namespace WallpaperAnimator.Properties {
         /// <summary>
         ///   Looks up a localized resource of type System.Drawing.Icon similar to (Icon).
         /// </summary>
-        internal static System.Drawing.Icon icon {
+        internal static System.Drawing.Icon icon_off {
             get {
-                object obj = ResourceManager.GetObject("icon", resourceCulture);
+                object obj = ResourceManager.GetObject("icon_off", resourceCulture);
+                return ((System.Drawing.Icon)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Drawing.Icon similar to (Icon).
+        /// </summary>
+        internal static System.Drawing.Icon icon_on {
+            get {
+                object obj = ResourceManager.GetObject("icon_on", resourceCulture);
                 return ((System.Drawing.Icon)(obj));
             }
         }
