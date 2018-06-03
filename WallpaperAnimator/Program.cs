@@ -11,16 +11,12 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
-using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using OpenTK.Platform;
 using WallpaperAnimator.Properties;
 using WindowUtils;
-using static System.Windows.Forms.VisualStyles.VisualStyleElement;
-using ListView = System.Windows.Forms.ListView;
 using Math = System.Math;
 
 namespace WallpaperAnimator
@@ -129,6 +125,7 @@ namespace WallpaperAnimator
         private static SystemTrayApp _trayIcon;
         private static List<MouseButtons> _down = new List<MouseButtons>();
 
+        /*
         [DllImport("user32.dll")]
         static extern bool SetLayeredWindowAttributes(IntPtr hwnd, uint crKey, byte bAlpha, uint dwFlags);
         [DllImport("user32.dll", SetLastError = true)]
@@ -139,7 +136,7 @@ namespace WallpaperAnimator
         public const int GWL_EXSTYLE = -20;
         public const int WS_EX_LAYERED = 0x80000;
         public const int LWA_ALPHA = 0x2;
-        public const int LWA_COLORKEY = 0x1;
+        public const int LWA_COLORKEY = 0x1;*/
 
         public Game() : base(1, 1, _gMode, "", GameWindowFlags.Default, DisplayDevice.Default, 3, 3,
             GraphicsContextFlags.ForwardCompatible)
@@ -161,7 +158,7 @@ namespace WallpaperAnimator
 
             Init();
 
-            GetInfo.Test();
+            //GetInfo.Test();
         }
 
         private void Init()
@@ -204,6 +201,7 @@ namespace WallpaperAnimator
                 {
                     var sb = new StringBuilder(256);
                     var w = W32.GetDesktopWindow();
+                    var target = IntPtr.Zero;
 
                     W32.EnumChildWindows(w, (hwnd, param) =>
                     {
@@ -211,7 +209,7 @@ namespace WallpaperAnimator
                         {
                             if (sb.ToString() == "SysListView32")
                             {
-                                W32.SendMessage(hwnd, 0x001F, 0, IntPtr.Zero);
+                                target = hwnd;
                             }
                         }
 
@@ -219,6 +217,9 @@ namespace WallpaperAnimator
 
                         return true;
                     }, IntPtr.Zero);
+
+                    if (target != IntPtr.Zero)
+                        W32.SendMessage(target, 0x001F, 0, IntPtr.Zero);
                 }
 
                 _lastMouse = e.Location;
@@ -284,7 +285,7 @@ namespace WallpaperAnimator
             GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
             GL.BlendEquation(BlendEquationMode.FuncAdd);
             //GL.CullFace(CullFaceMode.Back);
-            GL.LineWidth(2f);
+            GL.LineWidth(1f);
 
             var deltaTime = (float)_updateTimer.Elapsed.TotalMilliseconds / 50;
 
@@ -357,7 +358,7 @@ namespace WallpaperAnimator
             }
 
             SwapBuffers();
-
+            
             //glEnable GL_ALPHA_TEST 
 
             //glEnable GL_COLOR_MATERIAL 
@@ -596,7 +597,7 @@ namespace WallpaperAnimator
 
             return b;
         }
-
+        /*
         static class GetInfo
         {
             public enum LVM
@@ -807,6 +808,7 @@ namespace WallpaperAnimator
                 Console.WriteLine("Number of Icons on Desktop: " + iconCount);
             }
         }
+        */
     }
 
     internal class ParticleManager
@@ -862,7 +864,9 @@ namespace WallpaperAnimator
 
             var c = Hue.Create(deltaX / Game.Instance.Width * 360);
 
+            //GL.PushAttrib(AttribMask.LineBit);
             GL.PushMatrix();
+            //GL.LineWidth(deltaSize / StartSize);
 
             GL.Translate(deltaX, deltaY, 0);
             GL.Rotate(deltaAngle, 0, 0, 1);
@@ -870,7 +874,7 @@ namespace WallpaperAnimator
 
             GL.Begin(PrimitiveType.Polygon);
 
-            GL.Color4(c.X, c.Y, c.Z, deltaAlpha * 0.2);
+            GL.Color4(c.X, c.Y, c.Z, deltaAlpha * 0.15);
             GL.Vertex2(-0.5, -0.5);
             GL.Vertex2(-0.5, 0.5);
             GL.Vertex2(0.5, 0.5);
@@ -902,6 +906,7 @@ namespace WallpaperAnimator
             GL.End();
 
             GL.PopMatrix();
+           // GL.PopAttrib();
         }
     }
 
@@ -929,7 +934,9 @@ namespace WallpaperAnimator
 
             var x = 0.43301270189222f;
 
+           // GL.PushAttrib(AttribMask.LineBit);
             GL.PushMatrix();
+            //GL.LineWidth(deltaSize / StartSize);
 
             GL.Translate(deltaX, deltaY, 0);
             GL.Rotate(deltaAngle, 0, 0, 1);
@@ -937,7 +944,7 @@ namespace WallpaperAnimator
 
             GL.Begin(PrimitiveType.Polygon);
 
-            GL.Color4(c.X, c.Y, c.Z, deltaAlpha * 0.2);
+            GL.Color4(c.X, c.Y, c.Z, deltaAlpha * 0.15);
             GL.Vertex2(0, -x);
             GL.Vertex2(-0.5, x);
             GL.Vertex2(0.5, x);
@@ -964,6 +971,7 @@ namespace WallpaperAnimator
 
             GL.End();
             GL.PopMatrix();
+            //GL.PopAttrib();
         }
     }
 
@@ -987,28 +995,29 @@ namespace WallpaperAnimator
 
             var deltaAngle = PrevAngle + (Angle - PrevAngle) * deltaTime;
 
-            var c = Hue.Create(deltaX / Game.Instance.Width * 360);
-
+            var c = Hue.Create(deltaX / Game.Instance.Width * 360); 
+            
+           // GL.PushAttrib(AttribMask.LineBit);
             GL.PushMatrix();
+            //GL.LineWidth(deltaSize / StartSize);
 
             GL.Translate(deltaX, deltaY, 0);
             GL.Rotate(deltaAngle, 0, 0, 1);
             GL.Scale(deltaSize, deltaSize, 0);
-
+            
             GL.Begin(PrimitiveType.Polygon);
-
-            GL.Color4(c.X, c.Y, c.Z, deltaAlpha * 0.2);
-            VertexUtil.PutCircle(0, 0, 1, 24);
-
+            GL.Color4(c.X, c.Y, c.Z, deltaAlpha * 0.15);
+            VertexUtil.PutCircle(0, 0, 1, 20);
             GL.End();
-
+          
+           
             GL.Begin(PrimitiveType.LineLoop);
-
             GL.Color4(c.X, c.Y, c.Z, deltaAlpha);
-            VertexUtil.PutCircle(0, 0, 1, 24);
-
+            VertexUtil.PutCircle(0, 0, 1, 20);
             GL.End();
+
             GL.PopMatrix();
+            //GL.PopAttrib();
         }
     }
 
