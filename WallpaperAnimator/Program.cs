@@ -70,7 +70,6 @@ namespace WallpaperAnimator
                 return;
 
             _trayIcon.Icon = (_lastActive = active) ? Resources.icon_on : Resources.icon_off;
-            ;
         }
 
         private void OpenSettings(object sender, EventArgs e)
