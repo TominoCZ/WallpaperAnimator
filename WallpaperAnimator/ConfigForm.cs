@@ -13,10 +13,7 @@ namespace WallpaperAnimator
         public ConfigForm()
         {
             InitializeComponent();
-        }
 
-        private void ConfigForm_Load(object sender, EventArgs e)
-        {
             LoadSettings();
         }
 
@@ -26,13 +23,13 @@ namespace WallpaperAnimator
 
             var processes = Settings.Default.ProcessExceptions;
 
-            if (processes == null)
-                return;
-
-            for (var index = 0; index < processes.Count; index++)
+            if (processes != null)
             {
-                var process = processes[index];
-                lbProcessExceptions.Items.Add(process);
+                for (var index = 0; index < processes.Count; index++)
+                {
+                    var process = processes[index];
+                    lbProcessExceptions.Items.Add(process);
+                }
             }
 
             nudFramerate.Value = Settings.Default.FramerateLimit;
@@ -50,7 +47,7 @@ namespace WallpaperAnimator
             if (!_loaded)
                 return;
 
-            Settings.Default.ProcessExceptions.Clear();
+            Settings.Default.ProcessExceptions?.Clear();
 
             for (var index = 0; index < lbProcessExceptions.Items.Count; index++)
             {
